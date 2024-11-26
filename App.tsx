@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -20,7 +20,15 @@ const App = () => {
     heartRate,
     disconnectFromDevice,
   } = useBLE();
+
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+  const [manufacturerData, setManufacturerData] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  // Funzione per aggiornare i dati del manufacturer
+  const updateManufacturerData = (hexString: string) => {
+    setManufacturerData(hexString);
+  };
 
   const scanForDevices = async () => {
     const isPermissionsEnabled = await requestPermissions();
@@ -38,14 +46,39 @@ const App = () => {
     setIsModalVisible(true);
   };
 
+  // Imposta un intervallo per aggiornare i dati del manufacturer ogni 2 secondi
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    if (isRefreshing) {
+      intervalId = setInterval(() => {
+        if (manufacturerData) {
+          console.log("Refreshing Manufacturer Data:", manufacturerData);
+        }
+      }, 2000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId); // Pulisce l'intervallo quando il componente viene smontato o il ciclo è fermato
+    };
+  }, [manufacturerData, isRefreshing]);
+
+  const stopRefreshing = () => {
+    setIsRefreshing(false);
+  };
+
+  // Funzione per riprendere il ciclo di refresh
+  const startRefreshing = () => {
+    setIsRefreshing(true);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.heartRateTitleWrapper}>
-        {connectedDevice ? (
+        {isRefreshing ? (
           <>
             <PulseIndicator />
-            <Text style={styles.heartRateTitleText}>Your Heart Rate Is:</Text>
-            <Text style={styles.heartRateText}>{heartRate} bpm</Text>
+            <Text style={styles.heartRateTitleText}>Your data are:</Text>
+            <Text style={styles.heartRateText}>{manufacturerData} bpm</Text>
           </>
         ) : (
           <Text style={styles.heartRateTitleText}>
@@ -54,11 +87,11 @@ const App = () => {
         )}
       </View>
       <TouchableOpacity
-        onPress={connectedDevice ? disconnectFromDevice : openModal}
+        onPress={isRefreshing ? stopRefreshing : openModal}
         style={styles.ctaButton}
       >
         <Text style={styles.ctaButtonText}>
-          {connectedDevice ? "Disconnect" : "Connect"}
+          {isRefreshing ? "Disconnect" : "Connect"}
         </Text>
       </TouchableOpacity>
       <DeviceModal
@@ -66,6 +99,8 @@ const App = () => {
         visible={isModalVisible}
         connectToPeripheral={connectToDevice}
         devices={allDevices}
+        updateManufacturerData={updateManufacturerData}
+        startRefreshing={startRefreshing}
       />
     </SafeAreaView>
   );
@@ -91,6 +126,11 @@ const styles = StyleSheet.create({
   heartRateText: {
     fontSize: 25,
     marginTop: 15,
+  },
+  manufacturerDataText: {
+    fontSize: 16,
+    marginTop: 10,
+    color: "gray",
   },
   ctaButton: {
     backgroundColor: "#FF6060",

@@ -9,11 +9,14 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Device } from "react-native-ble-plx";
+import RNFetchBlob from 'rn-fetch-blob';
 
 type DeviceModalListItemProps = {
   item: ListRenderItemInfo<Device>;
   connectToPeripheral: (device: Device) => void;
   closeModal: () => void;
+  updateManufacturerData: (hexString: string) => void;
+  startRefreshing: () => void;
 };
 
 type DeviceModalProps = {
@@ -21,28 +24,62 @@ type DeviceModalProps = {
   visible: boolean;
   connectToPeripheral: (device: Device) => void;
   closeModal: () => void;
+  updateManufacturerData: (hexString: string) => void;
+  startRefreshing: () => void;
 };
 
 const DeviceModalListItem: FC<DeviceModalListItemProps> = (props) => {
-  const { item, connectToPeripheral, closeModal } = props;
+  const { item, updateManufacturerData, closeModal, startRefreshing } = props;
 
-  const connectAndCloseModal = useCallback(() => {
-    connectToPeripheral(item.item);
+  const handleItemClick = useCallback(() => {
+    // Stampa i manufacturer data quando l'utente clicca sulla card
+    if (item.item.manufacturerData) {
+
+      // Decodifica la stringa Base64 in un array di byte
+      const advertisingBinary = RNFetchBlob.base64.decode(item.item.manufacturerData);
+
+      // Converte la stringa binaria in un array di byte (Uint8Array)
+      const advertisingByteArray = new Uint8Array(advertisingBinary.length);
+
+      // Popola l'array di byte
+      for (let i = 0; i < advertisingBinary.length; i++) {
+        advertisingByteArray[i] = advertisingBinary.charCodeAt(i);
+      }
+
+      // Ora trasformiamo l'array di byte in una stringa esadecimale
+      let hexString = '';
+      advertisingByteArray.forEach(byte => {
+        // Converte ogni byte in esadecimale e lo aggiunge alla stringa
+        hexString += byte.toString(16).padStart(2, '0').toUpperCase();
+      });
+
+      hexString = hexString.replace(/([0-9A-F]{2})/g, '_$1').toUpperCase();
+      console.log("Manufacturer data as hex string:", hexString);
+
+      updateManufacturerData(hexString);
+      startRefreshing();
+    } else {
+      console.log("No manufacturer data available.");
+    }
+
+    // Chiudiamo il modal dopo aver stampato i dati
     closeModal();
-  }, [closeModal, connectToPeripheral, item.item]);
+  }, [closeModal, item.item, updateManufacturerData, startRefreshing]);
 
   return (
     <TouchableOpacity
-      onPress={connectAndCloseModal}
+      onPress={handleItemClick}
       style={modalStyle.ctaButton}
     >
-      <Text style={modalStyle.ctaButtonText}>{item.item.name}</Text>
+      <Text style={modalStyle.ctaButtonText}>
+        {item.item.id === "02:80:E1:00:00:00" ? "othis" : item.item.id}
+      </Text>
     </TouchableOpacity>
   );
 };
 
 const DeviceModal: FC<DeviceModalProps> = (props) => {
-  const { devices, visible, connectToPeripheral, closeModal } = props;
+  const { devices, visible, connectToPeripheral, closeModal, updateManufacturerData, startRefreshing } = props;
 
   const renderDeviceModalListItem = useCallback(
     (item: ListRenderItemInfo<Device>) => {
@@ -51,10 +88,12 @@ const DeviceModal: FC<DeviceModalProps> = (props) => {
           item={item}
           connectToPeripheral={connectToPeripheral}
           closeModal={closeModal}
+          updateManufacturerData={updateManufacturerData}
+          startRefreshing={startRefreshing}
         />
       );
     },
-    [closeModal, connectToPeripheral]
+    [closeModal, connectToPeripheral, updateManufacturerData, startRefreshing]
   );
 
   return (
@@ -68,6 +107,8 @@ const DeviceModal: FC<DeviceModalProps> = (props) => {
         <Text style={modalStyle.modalTitleText}>
           Tap on a device to connect
         </Text>
+
+        {/* FlatList per la lista scrollabile */}
         <FlatList
           contentContainerStyle={modalStyle.modalFlatlistContiner}
           data={devices}
@@ -84,23 +125,15 @@ const modalStyle = StyleSheet.create({
     backgroundColor: "#f2f2f2",
   },
   modalFlatlistContiner: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  modalCellOutline: {
-    borderWidth: 1,
-    borderColor: "black",
-    alignItems: "center",
-    marginHorizontal: 20,
-    paddingVertical: 15,
-    borderRadius: 8,
+    flexGrow: 1, // Aggiungi flexGrow per permettere che la lista si espanda se ci sono molti dispositivi
+    justifyContent: "flex-start", // Allinea gli elementi in alto
+    paddingBottom: 10, // Aggiungi spazio in fondo per il scrolling
   },
   modalTitle: {
-    flex: 1,
     backgroundColor: "#f2f2f2",
+    paddingTop: 40,
   },
   modalTitleText: {
-    marginTop: 40,
     fontSize: 30,
     fontWeight: "bold",
     marginHorizontal: 20,
