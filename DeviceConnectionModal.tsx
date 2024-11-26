@@ -9,14 +9,12 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Device } from "react-native-ble-plx";
-import RNFetchBlob from 'rn-fetch-blob';
 
 type DeviceModalListItemProps = {
-  item: ListRenderItemInfo<Device>;
+  selectedDevice: Device;
   connectToPeripheral: (device: Device) => void;
   closeModal: () => void;
-  updateManufacturerData: (hexString: string) => void;
-  startRefreshing: () => void;
+  onDeviceSelected: (device: Device) => void;
 };
 
 type DeviceModalProps = {
@@ -24,47 +22,17 @@ type DeviceModalProps = {
   visible: boolean;
   connectToPeripheral: (device: Device) => void;
   closeModal: () => void;
-  updateManufacturerData: (hexString: string) => void;
-  startRefreshing: () => void;
+  onDeviceSelected: (device: Device) => void;
+  selectedDevice: Device | null | undefined;
 };
 
 const DeviceModalListItem: FC<DeviceModalListItemProps> = (props) => {
-  const { item, updateManufacturerData, closeModal, startRefreshing } = props;
+  const { selectedDevice, closeModal, onDeviceSelected } = props;
 
   const handleItemClick = useCallback(() => {
-    // Stampa i manufacturer data quando l'utente clicca sulla card
-    if (item.item.manufacturerData) {
-
-      // Decodifica la stringa Base64 in un array di byte
-      const advertisingBinary = RNFetchBlob.base64.decode(item.item.manufacturerData);
-
-      // Converte la stringa binaria in un array di byte (Uint8Array)
-      const advertisingByteArray = new Uint8Array(advertisingBinary.length);
-
-      // Popola l'array di byte
-      for (let i = 0; i < advertisingBinary.length; i++) {
-        advertisingByteArray[i] = advertisingBinary.charCodeAt(i);
-      }
-
-      // Ora trasformiamo l'array di byte in una stringa esadecimale
-      let hexString = '';
-      advertisingByteArray.forEach(byte => {
-        // Converte ogni byte in esadecimale e lo aggiunge alla stringa
-        hexString += byte.toString(16).padStart(2, '0').toUpperCase();
-      });
-
-      hexString = hexString.replace(/([0-9A-F]{2})/g, '_$1').toUpperCase();
-      console.log("Manufacturer data as hex string:", hexString);
-
-      updateManufacturerData(hexString);
-      startRefreshing();
-    } else {
-      console.log("No manufacturer data available.");
-    }
-
-    // Chiudiamo il modal dopo aver stampato i dati
+    onDeviceSelected(selectedDevice);
     closeModal();
-  }, [closeModal, item.item, updateManufacturerData, startRefreshing]);
+  }, [closeModal, selectedDevice, onDeviceSelected]);
 
   return (
     <TouchableOpacity
@@ -72,28 +40,27 @@ const DeviceModalListItem: FC<DeviceModalListItemProps> = (props) => {
       style={modalStyle.ctaButton}
     >
       <Text style={modalStyle.ctaButtonText}>
-        {item.item.id === "02:80:E1:00:00:00" ? "othis" : item.item.id}
+        {selectedDevice.id === "02:80:E1:00:00:00" ? "othis" : selectedDevice.id}
       </Text>
     </TouchableOpacity>
   );
 };
 
 const DeviceModal: FC<DeviceModalProps> = (props) => {
-  const { devices, visible, connectToPeripheral, closeModal, updateManufacturerData, startRefreshing } = props;
+  const { devices, visible, connectToPeripheral, closeModal, onDeviceSelected, selectedDevice } = props;
 
   const renderDeviceModalListItem = useCallback(
     (item: ListRenderItemInfo<Device>) => {
       return (
         <DeviceModalListItem
-          item={item}
+          selectedDevice={item.item}
           connectToPeripheral={connectToPeripheral}
           closeModal={closeModal}
-          updateManufacturerData={updateManufacturerData}
-          startRefreshing={startRefreshing}
+          onDeviceSelected={onDeviceSelected}
         />
       );
     },
-    [closeModal, connectToPeripheral, updateManufacturerData, startRefreshing]
+    [closeModal, connectToPeripheral, onDeviceSelected, selectedDevice]
   );
 
   return (

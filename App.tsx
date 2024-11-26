@@ -9,6 +9,8 @@ import {
 import DeviceModal from "./DeviceConnectionModal";
 import { PulseIndicator } from "./PulseIndicator";
 import useBLE from "./useBLE";
+import { Device } from "react-native-ble-plx";
+import RNFetchBlob from "rn-fetch-blob";
 
 const App = () => {
   const {
@@ -24,6 +26,7 @@ const App = () => {
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [manufacturerData, setManufacturerData] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>();
 
   // Funzione per aggiornare i dati del manufacturer
   const updateManufacturerData = (hexString: string) => {
@@ -51,9 +54,8 @@ const App = () => {
     let intervalId: NodeJS.Timeout | null = null;
     if (isRefreshing) {
       intervalId = setInterval(() => {
-        if (manufacturerData) {
-          console.log("Refreshing Manufacturer Data:", manufacturerData);
-        }
+        resetManufacturerData();
+        getData();
       }, 2000);
     }
 
@@ -69,6 +71,46 @@ const App = () => {
   // Funzione per riprendere il ciclo di refresh
   const startRefreshing = () => {
     setIsRefreshing(true);
+    getData();
+  };
+
+  const getData = () => {
+    if (selectedDevice && selectedDevice.manufacturerData) {
+
+      // Decodifica la stringa Base64 in un array di byte
+      const advertisingBinary = RNFetchBlob.base64.decode(selectedDevice.manufacturerData);
+
+      // Converte la stringa binaria in un array di byte (Uint8Array)
+      const advertisingByteArray = new Uint8Array(advertisingBinary.length);
+
+      // Popola l'array di byte
+      for (let i = 0; i < advertisingBinary.length; i++) {
+        advertisingByteArray[i] = advertisingBinary.charCodeAt(i);
+      }
+
+      // Ora trasformiamo l'array di byte in una stringa esadecimale
+      let hexString = '';
+      advertisingByteArray.forEach(byte => {
+        // Converte ogni byte in esadecimale e lo aggiunge alla stringa
+        hexString += byte.toString(16).padStart(2, '0').toUpperCase();
+      });
+
+      hexString = hexString.replace(/([0-9A-F]{2})/g, '_$1').toUpperCase();
+      console.log("Manufacturer data as hex string:", hexString);
+
+      updateManufacturerData(hexString);
+    } else {
+      console.log("No device or manufacturer data available.");
+    }
+  }
+
+  const resetManufacturerData = () => {
+    setManufacturerData(null); // Azzera i dati memorizzati
+  };
+
+  const handleDeviceSelected = (device: any) => {
+    setSelectedDevice(device); // Memorizza il dispositivo selezionato
+    startRefreshing(); // Avvia il refresh dei dati
   };
 
   return (
@@ -99,8 +141,8 @@ const App = () => {
         visible={isModalVisible}
         connectToPeripheral={connectToDevice}
         devices={allDevices}
-        updateManufacturerData={updateManufacturerData}
-        startRefreshing={startRefreshing}
+        onDeviceSelected={handleDeviceSelected}
+        selectedDevice={selectedDevice}
       />
     </SafeAreaView>
   );
