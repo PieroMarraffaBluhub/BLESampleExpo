@@ -6,79 +6,71 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import DeviceModal from "./DeviceConnectionModal";
 import { PulseIndicator } from "./PulseIndicator";
 import useBLE from "./useBLE";
 import { Device } from "react-native-ble-plx";
 import RNFetchBlob from "rn-fetch-blob";
 
 const App = () => {
-  const {
-    requestPermissions,
-    scanForPeripherals,
-    allDevices,
-    connectToDevice,
-    connectedDevice,
-    heartRate,
-    disconnectFromDevice,
-  } = useBLE();
-
-  const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [manufacturerData, setManufacturerData] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [selectedDevice, setSelectedDevice] = useState<Device | null>();
+  const [othis, setOthis] = useState<Device | null>();
+
+  const {
+    requestPermissions,
+    scanForPeripherals
+  } = useBLE(setOthis); // Passa la funzione per aggiornare il dispositivo selezionato
 
   // Funzione per aggiornare i dati del manufacturer
   const updateManufacturerData = (hexString: string) => {
     setManufacturerData(hexString);
   };
 
-  const scanForDevices = async () => {
+  const connectOthis = async () => {
+    console.log('Click su connect');
+    setOthis(null); // Resetta lo stato precedente
     const isPermissionsEnabled = await requestPermissions();
+
     if (isPermissionsEnabled) {
+      console.log('Inizio scansione');
       scanForPeripherals();
+
+      // Aspetta che othis venga settato
+      const interval = setInterval(() => {
+        if (othis) {
+          clearInterval(interval);
+          console.log('Othis trovato:', othis);
+          getData(); // Ottieni i dati solo quando othis è disponibile
+          setIsRefreshing(true);
+        }
+      }, 500); // Controlla ogni mezzo secondo
     }
-  };
-
-  const hideModal = () => {
-    setIsModalVisible(false);
-  };
-
-  const openModal = async () => {
-    scanForDevices();
-    setIsModalVisible(true);
   };
 
   // Imposta un intervallo per aggiornare i dati del manufacturer ogni 2 secondi
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
-    if (isRefreshing) {
+    if (othis && isRefreshing) {
       intervalId = setInterval(() => {
-        resetManufacturerData();
-        getData();
+        console.log('sto refreshando othis');
+        connectOthis();
       }, 2000);
     }
-
     return () => {
       if (intervalId) clearInterval(intervalId); // Pulisce l'intervallo quando il componente viene smontato o il ciclo è fermato
     };
-  }, [manufacturerData, isRefreshing]);
+  }, [manufacturerData, othis]);
 
   const stopRefreshing = () => {
     setIsRefreshing(false);
   };
 
-  // Funzione per riprendere il ciclo di refresh
-  const startRefreshing = () => {
-    setIsRefreshing(true);
-    getData();
-  };
-
   const getData = () => {
-    if (selectedDevice && selectedDevice.manufacturerData) {
+    if (othis && othis.manufacturerData) {
 
+      console.log('cerco i dati________________________ ');
       // Decodifica la stringa Base64 in un array di byte
-      const advertisingBinary = RNFetchBlob.base64.decode(selectedDevice.manufacturerData);
+      const advertisingBinary = RNFetchBlob.base64.decode(othis.manufacturerData);
 
       // Converte la stringa binaria in un array di byte (Uint8Array)
       const advertisingByteArray = new Uint8Array(advertisingBinary.length);
@@ -104,15 +96,6 @@ const App = () => {
     }
   }
 
-  const resetManufacturerData = () => {
-    setManufacturerData(null); // Azzera i dati memorizzati
-  };
-
-  const handleDeviceSelected = (device: any) => {
-    setSelectedDevice(device); // Memorizza il dispositivo selezionato
-    startRefreshing(); // Avvia il refresh dei dati
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.heartRateTitleWrapper}>
@@ -129,21 +112,13 @@ const App = () => {
         )}
       </View>
       <TouchableOpacity
-        onPress={isRefreshing ? stopRefreshing : openModal}
+        onPress={isRefreshing ? stopRefreshing : connectOthis}
         style={styles.ctaButton}
       >
         <Text style={styles.ctaButtonText}>
           {isRefreshing ? "Disconnect" : "Connect"}
         </Text>
       </TouchableOpacity>
-      <DeviceModal
-        closeModal={hideModal}
-        visible={isModalVisible}
-        connectToPeripheral={connectToDevice}
-        devices={allDevices}
-        onDeviceSelected={handleDeviceSelected}
-        selectedDevice={selectedDevice}
-      />
     </SafeAreaView>
   );
 };
