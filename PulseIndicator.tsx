@@ -43,9 +43,8 @@ export const PulseIndicator = () => {
       <Circle cx={150} cy={150} r={scale} opacity={opacity} color="#FF6060" />
       <Circle cx={150} cy={150} r={scale2} opacity={opacity2} color="#FF6060" />
       <Image
-        image={heart}
+        image={expo}
         fit="contain"
-
         x={125}
         y={125}
         width={50}
