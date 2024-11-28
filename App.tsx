@@ -1,149 +1,219 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import DeviceModal from "./DeviceConnectionModal";
 import { PulseIndicator } from "./PulseIndicator";
 import useBLE from "./useBLE";
 import { Device } from "react-native-ble-plx";
-import RNFetchBlob from "rn-fetch-blob";
+import { getData } from "./connectionUtils";
+/* import { LineChart } from "react-native-chart-kit";
+ */import { Dimensions, LogBox } from "react-native";
+
+LogBox.ignoreLogs([
+  "`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.",
+  "`new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.",
+]);
 
 const App = () => {
+  const [manufacturerData, setManufacturerData] = useState<string | null>(null);
+  const [previousManufacturerData, setPreviousManufacturerData] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [firstRun, setFirstRun] = useState<boolean>(true);
+  const [othis, setOthis] = useState<Device | null>();
+
+  const [gx, setGx] = useState<string | null>(null);
+  const [gy, setGy] = useState<string | null>(null);
+  const [gz, setGz] = useState<string | null>(null);
+  const [p1Data, setP1Data] = useState<string[]>([]);
+  const [p2Data, setP2Data] = useState<string[]>([]);
+
+  const onDeviceFound = useCallback((device: Device) => {
+    setOthis(device); // Aggiorna il dispositivo selezionato
+  }, []);
+
+
   const {
     requestPermissions,
     scanForPeripherals,
-    allDevices,
-    connectToDevice,
-    connectedDevice,
-    heartRate,
-    disconnectFromDevice,
-  } = useBLE();
+    forceBlockScan
+  } = useBLE(onDeviceFound); // Passa la funzione per aggiornare il dispositivo selezionato
 
-  const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-  const [manufacturerData, setManufacturerData] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [selectedDevice, setSelectedDevice] = useState<Device | null>();
+  const screenWidth = Dimensions.get("window").width;
+  const numericP1Data = p1Data.map((value) => parseInt(value, 10) || 0);
 
   // Funzione per aggiornare i dati del manufacturer
   const updateManufacturerData = (hexString: string) => {
     setManufacturerData(hexString);
+    setPreviousManufacturerData((prevData) => [...prevData, hexString]);
   };
 
-  const scanForDevices = async () => {
+  const updateP1 = (p1Value: string) => {
+    setP1Data((prevData) => [...prevData, p1Value]);
+  }
+
+  const updateP2 = (p2Values: string[]) => {
+    for (let i = 0; i < p2Values.length; i++) {
+      const p2Value = p2Values[i]
+      setP2Data((prevData) => [...prevData, p2Value]);
+    }
+  }
+
+  const firstTimeConnection = async () => {
+    setIsSearching(true);
+    setFirstRun(false);
+    setPreviousManufacturerData([]);
+    connectOthis();
+  }
+
+  const connectOthis = async () => {
+    setIsSearching(true);
+    setIsRefreshing(true);
+    setOthis(null); // Resetta lo stato precedente
     const isPermissionsEnabled = await requestPermissions();
+
     if (isPermissionsEnabled) {
+      console.log("Inizio scansione");
       scanForPeripherals();
     }
   };
 
-  const hideModal = () => {
-    setIsModalVisible(false);
-  };
+  useEffect(() => {
+    if (othis) {
+      setIsSearching(false);
+      console.log("Othis trovato:", othis);
+      getData(othis, setGx, setGy, setGz, updateP1, updateP2);
+      setIsRefreshing(true);
+    }
+  }, [othis]);
 
-  const openModal = async () => {
-    scanForDevices();
-    setIsModalVisible(true);
-  };
+  useEffect(() => {
+    if (othis && onDeviceFound) {
+      console.log("Notifico dispositivo trovato.");
+      onDeviceFound(othis);
+    }
+  }, [othis, onDeviceFound]);
 
-  // Imposta un intervallo per aggiornare i dati del manufacturer ogni 2 secondi
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
-    if (isRefreshing) {
+    if (othis && isRefreshing) {
       intervalId = setInterval(() => {
-        resetManufacturerData();
-        getData();
-      }, 2000);
+        console.log("Aggiorno i dati di othis...");
+        connectOthis();
+      }, 500);
     }
-
     return () => {
-      if (intervalId) clearInterval(intervalId); // Pulisce l'intervallo quando il componente viene smontato o il ciclo è fermato
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [manufacturerData, isRefreshing]);
+  }, [othis, isRefreshing]);
 
   const stopRefreshing = () => {
+    setIsSearching(false);
+    forceBlockScan();
     setIsRefreshing(false);
   };
 
-  // Funzione per riprendere il ciclo di refresh
-  const startRefreshing = () => {
-    setIsRefreshing(true);
-    getData();
-  };
-
-  const getData = () => {
-    if (selectedDevice && selectedDevice.manufacturerData) {
-
-      // Decodifica la stringa Base64 in un array di byte
-      const advertisingBinary = RNFetchBlob.base64.decode(selectedDevice.manufacturerData);
-
-      // Converte la stringa binaria in un array di byte (Uint8Array)
-      const advertisingByteArray = new Uint8Array(advertisingBinary.length);
-
-      // Popola l'array di byte
-      for (let i = 0; i < advertisingBinary.length; i++) {
-        advertisingByteArray[i] = advertisingBinary.charCodeAt(i);
-      }
-
-      // Ora trasformiamo l'array di byte in una stringa esadecimale
-      let hexString = '';
-      advertisingByteArray.forEach(byte => {
-        // Converte ogni byte in esadecimale e lo aggiunge alla stringa
-        hexString += byte.toString(16).padStart(2, '0').toUpperCase();
-      });
-
-      hexString = hexString.replace(/([0-9A-F]{2})/g, '_$1').toUpperCase();
-      console.log("Manufacturer data as hex string:", hexString);
-
-      updateManufacturerData(hexString);
-    } else {
-      console.log("No device or manufacturer data available.");
-    }
+  const clearHistory = () => {
+    setP1Data([]);
+    setP2Data([]);
   }
-
-  const resetManufacturerData = () => {
-    setManufacturerData(null); // Azzera i dati memorizzati
-  };
-
-  const handleDeviceSelected = (device: any) => {
-    setSelectedDevice(device); // Memorizza il dispositivo selezionato
-    startRefreshing(); // Avvia il refresh dei dati
-  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.heartRateTitleWrapper}>
-        {isRefreshing ? (
-          <>
-            <PulseIndicator />
-            <Text style={styles.heartRateTitleText}>Your data are:</Text>
-            <Text style={styles.heartRateText}>{manufacturerData} bpm</Text>
-          </>
-        ) : (
-          <Text style={styles.heartRateTitleText}>
-            Please Connect to a Heart Rate Monitor
-          </Text>
-        )}
-      </View>
-      <TouchableOpacity
-        onPress={isRefreshing ? stopRefreshing : openModal}
-        style={styles.ctaButton}
-      >
-        <Text style={styles.ctaButtonText}>
-          {isRefreshing ? "Disconnect" : "Connect"}
-        </Text>
-      </TouchableOpacity>
-      <DeviceModal
-        closeModal={hideModal}
-        visible={isModalVisible}
-        connectToPeripheral={connectToDevice}
-        devices={allDevices}
-        onDeviceSelected={handleDeviceSelected}
-        selectedDevice={selectedDevice}
-      />
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.header}>
+          {firstRun ? (
+            <>
+              <Text style={styles.dataText}>
+                Please Connect to Othis
+              </Text>
+            </>
+          ) : isSearching || isRefreshing ? (
+            <>
+              <View style={styles.runningWrapper}>
+                <PulseIndicator />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.dataText}>YOUR DATA ARE:</Text>
+            </>
+          )
+          }
+        </View>
+
+        {/* Sezione valori Gx, Gy, Gz */}
+        <View style={styles.gValuesContainer}>
+          <Text style={styles.gValueText}>Gx: {gx || "-"}</Text>
+          <Text style={styles.gValueText}>Gy: {gy || "-"}</Text>
+          <Text style={styles.gValueText}>Gz: {gz || "-"}</Text>
+        </View>
+
+        {/* Seconda ScrollView: p1Data */}
+        <View style={styles.scrollViewWrapper}>
+          <Text style={styles.scrollViewTitle}>P1 Data:</Text>
+          <ScrollView style={styles.scrollView}>
+            {p1Data.slice().reverse().map((data, index) => (
+              <Text key={index} style={styles.previousDataText}>
+                {p1Data.length - index}. {data}
+              </Text>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Seconda ScrollView: p2Data */}
+        <View style={styles.scrollViewWrapper}>
+          <Text style={styles.scrollViewTitle}>P2 Data:</Text>
+          <ScrollView style={styles.scrollView}>
+            {p2Data.slice().reverse().map((data, index) => (
+              <Text key={index} style={styles.previousDataText}>
+                {p2Data.length - index}. {data}
+              </Text>
+            ))}
+          </ScrollView>
+        </View>
+
+      </ScrollView>
+      {firstRun ? (
+        <>
+          <TouchableOpacity
+            onPress={firstTimeConnection}
+            style={styles.ctaButton}
+          >
+            <Text style={styles.ctaButtonText}>
+              Connect
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <TouchableOpacity
+            onPress={isRefreshing ? stopRefreshing : connectOthis}
+            style={styles.ctaButton}
+          >
+            <Text style={styles.ctaButtonText}>
+              {isRefreshing ? "STOP" : "RESTART"}
+            </Text>
+          </TouchableOpacity>
+          {p1Data.length > 0 ? (
+            <>
+              <TouchableOpacity
+                onPress={clearHistory}
+                style={styles.ctaButton}
+              >
+                <Text style={styles.ctaButtonText}>
+                  CLEAR HISTORY
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
+        </>
+      )}
     </SafeAreaView>
   );
 };
@@ -153,40 +223,77 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f2f2f2",
   },
-  heartRateTitleWrapper: {
-    flex: 1,
+  scrollContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 10,
     justifyContent: "center",
+  },
+  runningWrapper: {
+    flexDirection: "row",
     alignItems: "center",
   },
-  heartRateTitleText: {
-    fontSize: 30,
+  runningText: {
+    fontSize: 20,
     fontWeight: "bold",
-    textAlign: "center",
-    marginHorizontal: 20,
+    color: "black",
+    marginLeft: 10,
+  },
+  dataText: {
+    fontSize: 20,
+    fontWeight: "bold",
     color: "black",
   },
-  heartRateText: {
-    fontSize: 25,
-    marginTop: 15,
+  gValuesContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 10,
   },
-  manufacturerDataText: {
+  gValueText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "black",
+  },
+  scrollViewWrapper: {
+    marginVertical: 10,
+  },
+  scrollViewTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 5,
+    color: "black",
+  },
+  scrollView: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 10,
+    maxHeight: 200, // Imposta l'altezza massima
+  },
+  previousDataText: {
     fontSize: 16,
-    marginTop: 10,
     color: "gray",
+    marginVertical: 5,
   },
   ctaButton: {
     backgroundColor: "#FF6060",
     justifyContent: "center",
     alignItems: "center",
     height: 50,
-    marginHorizontal: 20,
-    marginBottom: 5,
+    marginBottom: 10,
     borderRadius: 8,
   },
   ctaButtonText: {
     fontSize: 18,
     fontWeight: "bold",
     color: "white",
+  },
+  chartWrapper: {
+    marginVertical: 10,
   },
 });
 
