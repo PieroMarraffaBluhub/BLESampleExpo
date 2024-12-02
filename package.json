@@ -9,12 +9,15 @@
   },
   "dependencies": {
     "@config-plugins/react-native-ble-plx": "^5.0.0",
+    "@react-native-async-storage/async-storage": "^2.1.0",
     "@shopify/react-native-skia": "0.1.157",
+    "aws-sdk": "^2.1692.0",
     "convert-string": "^0.1.0",
     "eas-cli": "^3.5.2",
     "expo": "~47.0.14",
     "expo-dev-client": "~2.0.1",
     "expo-device": "~5.0.0",
+    "expo-random": "^14.0.1",
     "expo-splash-screen": "~0.17.5",
     "expo-status-bar": "~1.4.2",
     "react": "18.1.0",
@@ -22,6 +25,7 @@
     "react-native": "0.70.8",
     "react-native-base64": "^0.2.1",
     "react-native-ble-plx": "^2.0.3",
+    "react-native-document-picker": "^9.3.1",
     "react-native-web": "~0.18.9",
     "rn-fetch-blob": "^0.12.0"
   },

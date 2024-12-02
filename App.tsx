@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -7,17 +8,40 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { PulseIndicator } from "./PulseIndicator";
+import { PulseIndicator } from "./src/PulseIndicator/PulseIndicator";
 import useBLE from "./useBLE";
 import { Device } from "react-native-ble-plx";
-import { getData } from "./connectionUtils";
-/* import { LineChart } from "react-native-chart-kit";
- */import { Dimensions, LogBox } from "react-native";
+import { getData } from "./src/utils/connectionUtils";
+import { Dimensions, LogBox } from "react-native";
+
+import DocumentPicker from 'react-native-document-picker';
+import AWS from 'aws-sdk';
+import { getFormattedDate } from "./src/utils/genericUtils";
+
 
 LogBox.ignoreLogs([
   "`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.",
   "`new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.",
 ]);
+
+AWS.config.update({
+  accessKeyId: '',
+  secretAccessKey: '',
+  region: 'eu-south-1',
+})
+
+const s3 = new AWS.S3();
+
+const uploadJsonString = (bucketName: string, fileName: string, jsonString: string) => {
+  const params = {
+    Bucket: bucketName,
+    Key: fileName,
+    Body: jsonString,
+    ContentType: 'application/json'
+  };
+
+  return s3.upload(params).promise();
+}
 
 const App = () => {
   const [manufacturerData, setManufacturerData] = useState<string | null>(null);
@@ -32,6 +56,13 @@ const App = () => {
   const [gz, setGz] = useState<string | null>(null);
   const [p1Data, setP1Data] = useState<string[]>([]);
   const [p2Data, setP2Data] = useState<string[]>([]);
+
+  const aws_options = {
+    keyPrefix: "uploads/",
+    bucket: "aws-othis-bucket",
+    region: "eu-south-1",
+    successActionStatus: 201
+  }
 
   const onDeviceFound = useCallback((device: Device) => {
     setOthis(device); // Aggiorna il dispositivo selezionato
@@ -88,6 +119,7 @@ const App = () => {
       setIsSearching(false);
       console.log("Othis trovato:", othis);
       getData(othis, setGx, setGy, setGz, updateP1, updateP2);
+      createJson()
       setIsRefreshing(true);
     }
   }, [othis]);
@@ -122,6 +154,66 @@ const App = () => {
     setP1Data([]);
     setP2Data([]);
   }
+
+  /* const pickFile = async () => {
+    try {
+      const fileDetails = await DocumentPicker.pickSingle({
+        type: DocumentPicker.types.json,
+        copyTo: 'cachesDirectory',
+      });
+
+      const bucketName = "aws-othis-bucket";
+
+      const filePath = fileDetails.uri.replace('file://', '');
+      const fileName = fileDetails.name;
+
+      try {
+        const fileData = await fetch(filePath).then(response => response.json());
+        if (fileName) {
+          await uploadFile(bucketName, fileName, fileData);
+          console.log("File caricato con successo:", fileName);
+        }
+      } catch (uploadError) {
+        console.log("Errore durante il caricamento:", uploadError);
+        Alert.alert('Error', 'Errore durante il caricamento');
+      }
+    } catch (error) {
+      console.log("Errore generale:", error);
+      Alert.alert(
+        'Error',
+        DocumentPicker.isCancel(error) ? 'File selection cancelled' : 'Unknown Error: ' + JSON.stringify(error),
+      )
+    }
+  } */
+
+  const createJson = () => {
+    const jsonString = JSON.stringify({
+      "gx": gx,
+      "gy": gy,
+      "gz": gz,
+      "p1": p1Data[p1Data.length - 1],
+      "p2": {
+        "p2-1": p2Data[p2Data.length - 1],
+        "p2-2": p2Data[p2Data.length - 2],
+        "p2-3": p2Data[p2Data.length - 3],
+        "p2-4": p2Data[p2Data.length - 4],
+        "p2-5": p2Data[p2Data.length - 5],
+        "p2-6": p2Data[p2Data.length - 6],
+        "p2-7": p2Data[p2Data.length - 7],
+        "p2-8": p2Data[p2Data.length - 8],
+        "p2-9": p2Data[p2Data.length - 9],
+        "p2-10": p2Data[p2Data.length - 10]
+      },
+      "timestamp": getFormattedDate("completa")
+    });
+
+    console.log("salvo il seguente json:", jsonString);
+
+    const bucketName = `aws-othis-bucket/${getFormattedDate("parziale")}`;
+    const fileName = `othis-data-${getFormattedDate("completa")}.json`;
+    uploadJsonString(bucketName, fileName, jsonString);
+  };
+
 
   return (
     <SafeAreaView style={styles.container}>
