@@ -13,10 +13,9 @@ import useBLE from "./useBLE";
 import { Device } from "react-native-ble-plx";
 import { getData } from "./src/utils/connectionUtils";
 import { Dimensions, LogBox } from "react-native";
-
-import DocumentPicker from 'react-native-document-picker';
 import AWS from 'aws-sdk';
 import { getFormattedDate } from "./src/utils/genericUtils";
+import { AWS_CREDENTIALS } from "./aws_credentials";
 
 
 LogBox.ignoreLogs([
@@ -25,8 +24,8 @@ LogBox.ignoreLogs([
 ]);
 
 AWS.config.update({
-  accessKeyId: '',
-  secretAccessKey: '',
+  accessKeyId: AWS_CREDENTIALS.public_key,
+  secretAccessKey: AWS_CREDENTIALS.private_key,
   region: 'eu-south-1',
 })
 
@@ -51,6 +50,7 @@ const App = () => {
   const [firstRun, setFirstRun] = useState<boolean>(true);
   const [othis, setOthis] = useState<Device | null>();
 
+  const [battery, setBattery] = useState<string | null>(null);
   const [gx, setGx] = useState<string | null>(null);
   const [gy, setGy] = useState<string | null>(null);
   const [gz, setGz] = useState<string | null>(null);
@@ -118,7 +118,7 @@ const App = () => {
     if (othis) {
       setIsSearching(false);
       console.log("Othis trovato:", othis);
-      getData(othis, setGx, setGy, setGz, updateP1, updateP2);
+      getData(othis, setBattery, setGx, setGy, setGz, updateP1, updateP2);
       createJson()
       setIsRefreshing(true);
     }
@@ -151,65 +151,38 @@ const App = () => {
   };
 
   const clearHistory = () => {
+    setGx(null);
+    setGy(null);
+    setGz(null);
     setP1Data([]);
     setP2Data([]);
   }
 
-  /* const pickFile = async () => {
-    try {
-      const fileDetails = await DocumentPicker.pickSingle({
-        type: DocumentPicker.types.json,
-        copyTo: 'cachesDirectory',
-      });
-
-      const bucketName = "aws-othis-bucket";
-
-      const filePath = fileDetails.uri.replace('file://', '');
-      const fileName = fileDetails.name;
-
-      try {
-        const fileData = await fetch(filePath).then(response => response.json());
-        if (fileName) {
-          await uploadFile(bucketName, fileName, fileData);
-          console.log("File caricato con successo:", fileName);
-        }
-      } catch (uploadError) {
-        console.log("Errore durante il caricamento:", uploadError);
-        Alert.alert('Error', 'Errore durante il caricamento');
-      }
-    } catch (error) {
-      console.log("Errore generale:", error);
-      Alert.alert(
-        'Error',
-        DocumentPicker.isCancel(error) ? 'File selection cancelled' : 'Unknown Error: ' + JSON.stringify(error),
-      )
-    }
-  } */
-
   const createJson = () => {
     const jsonString = JSON.stringify({
+      "battery": battery,
       "gx": gx,
       "gy": gy,
       "gz": gz,
       "p1": p1Data[p1Data.length - 1],
-      "p2": {
-        "p2-1": p2Data[p2Data.length - 1],
-        "p2-2": p2Data[p2Data.length - 2],
-        "p2-3": p2Data[p2Data.length - 3],
-        "p2-4": p2Data[p2Data.length - 4],
-        "p2-5": p2Data[p2Data.length - 5],
-        "p2-6": p2Data[p2Data.length - 6],
-        "p2-7": p2Data[p2Data.length - 7],
-        "p2-8": p2Data[p2Data.length - 8],
-        "p2-9": p2Data[p2Data.length - 9],
-        "p2-10": p2Data[p2Data.length - 10]
-      },
+      "p2": [
+        p2Data[p2Data.length - 1],
+        p2Data[p2Data.length - 2],
+        p2Data[p2Data.length - 3],
+        p2Data[p2Data.length - 4],
+        p2Data[p2Data.length - 5],
+        p2Data[p2Data.length - 6],
+        p2Data[p2Data.length - 7],
+        p2Data[p2Data.length - 8],
+        p2Data[p2Data.length - 9],
+        p2Data[p2Data.length - 10]
+      ],
       "timestamp": getFormattedDate("completa")
     });
 
     console.log("salvo il seguente json:", jsonString);
 
-    const bucketName = `aws-othis-bucket/${getFormattedDate("parziale")}`;
+    const bucketName = `aws-othis-bucket-frankfurt/${getFormattedDate("parziale")}`;
     const fileName = `othis-data-${getFormattedDate("completa")}.json`;
     uploadJsonString(bucketName, fileName, jsonString);
   };
@@ -244,6 +217,10 @@ const App = () => {
           <Text style={styles.gValueText}>Gx: {gx || "-"}</Text>
           <Text style={styles.gValueText}>Gy: {gy || "-"}</Text>
           <Text style={styles.gValueText}>Gz: {gz || "-"}</Text>
+        </View>
+
+        <View style={styles.gValuesContainer}>
+          <Text style={styles.gValueText}>Batteria: {battery || "-"} %</Text>
         </View>
 
         {/* Prima ScrollView: p1Data */}

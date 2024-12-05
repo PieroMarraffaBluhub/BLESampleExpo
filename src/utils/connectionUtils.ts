@@ -3,6 +3,7 @@ import RNFetchBlob from "rn-fetch-blob";
 
 export const getData = (
     othis : Device | null,
+    setBattery : (gX : string) => void,
     setGx : (gX : string) => void,
     setGy : (gY : string) => void,
     setGz : (gz : string) => void,
@@ -33,7 +34,7 @@ export const getData = (
       hexString = hexString.replace(/([0-9A-F]{2})/g, ' $1').toUpperCase();
       console.log("Manufacturer data as hex string:", hexString);
 
-      transformData(hexString, setGx, setGy, setGz, updateP1, updateP2);
+      transformData(hexString, setBattery, setGx, setGy, setGz, updateP1, updateP2);
     } else {
       console.log("No device or manufacturer data available.");
     }
@@ -41,6 +42,7 @@ export const getData = (
 
 const transformData = (
     data : string,
+    setBattery : (gX : string) => void,
     setGx : (gX : string) => void,
     setGy : (gY : string) => void,
     setGz : (gz : string) => void,
@@ -48,6 +50,7 @@ const transformData = (
     updateP2 : (p2Values : string[]) => void,
 ) => {
     const array = data.trim().split(/\s+/);
+    setBattery(convertBatteryData(array[0]));
     setGx(convertGData(array[1]));
     setGy(convertGData(array[2]));
     setGz(convertGData(array[3]));
@@ -73,4 +76,10 @@ const convertSensorData = (sData : string) => {
     const s = parseInt(sData, 16);
     const sX = (s * 0.0000254312) - 0.33333;
     return sX.toString();
+}
+
+const convertBatteryData = (bData : string) => {
+    const b = parseInt(bData, 16);
+    const bX = (b * 100 * 15.15625)/3880;
+    return bX.toString();
 }
